@@ -3,7 +3,7 @@ ultralytics>=8.0.200
 torch>=2.0.0
 torchvision>=0.15.0
 
-# Use headless OpenCV for cloud environments (no GUI dependencies)
+# Use ONLY headless OpenCV (remove regular opencv-python)
 opencv-python-headless>=4.8.0
 
 # Data handling
