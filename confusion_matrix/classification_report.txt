@@ -1,0 +1,21 @@
+CLASSIFICATION REPORT - ACCIDENT DETECTION
+============================================================
+
+              precision    recall  f1-score   support
+
+    Accident       0.97      0.93      0.95       435
+Non Accident       0.94      0.97      0.95       462
+
+    accuracy                           0.95       897
+   macro avg       0.95      0.95      0.95       897
+weighted avg       0.95      0.95      0.95       897
+
+
+============================================================
+
+Confusion Matrix:
+                 Predicted
+              Accident  Non Accident
+Actual
+  Accident          405          30
+  Non Accident       14         448
