@@ -6,18 +6,23 @@ Streamlit-based UI for accident detection
 import streamlit as st
 import sys
 import os
+import subprocess
 
-# Fix for headless OpenCV
-os.environ['OPENCV_IO_ENABLE_OPENEXR'] = '1'
-
-# Import OpenCV with fallback
+# Force headless OpenCV - uninstall regular opencv if present
 try:
     import cv2
+    # Check if this is the regular version (has GUI dependencies)
+    if hasattr(cv2, 'imshow'):
+        # Regular version detected, try to force headless
+        subprocess.check_call([sys.executable, "-m", "pip", "uninstall", "-y", "opencv-python"])
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "--force-reinstall", "opencv-python-headless"])
+        import importlib
+        importlib.reload(cv2)
 except ImportError:
-    import subprocess
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "opencv-python-headless"])
-    import cv2
+    pass
 
+# Now import cv2
+import cv2
 import torch
 import tempfile
 from pathlib import Path
