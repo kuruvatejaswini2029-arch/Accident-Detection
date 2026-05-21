@@ -4,7 +4,20 @@ Streamlit-based UI for accident detection
 """
 
 import streamlit as st
-import cv2
+import sys
+import os
+
+# Fix for headless OpenCV
+os.environ['OPENCV_IO_ENABLE_OPENEXR'] = '1'
+
+# Import OpenCV with fallback
+try:
+    import cv2
+except ImportError:
+    import subprocess
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "opencv-python-headless"])
+    import cv2
+
 import torch
 import tempfile
 from pathlib import Path
@@ -15,7 +28,7 @@ import pandas as pd
 from datetime import datetime
 import plotly.express as px
 import plotly.graph_objects as go
-import os
+import gc
 
 # Import detection functions
 from detection import AccidentDetector, process_video_stream
@@ -87,7 +100,8 @@ model_paths = [
     "models/best.pt",
     "best.pt",
     "../models/best.pt",
-    "../best.pt"
+    "../best.pt",
+    "Accident-Detection/models/best.pt"
 ]
 
 model_path = None
@@ -97,7 +111,7 @@ for path in model_paths:
         break
 
 if model_path is None:
-    st.sidebar.warning("⚠️ Model not found. Please upload best.pt")
+    st.sidebar.warning("⚠️ Model not found. Please ensure best.pt is in the models/ folder")
     model_path = st.sidebar.text_input(
         "Model Path",
         value="models/best.pt",
@@ -110,7 +124,7 @@ if st.sidebar.button("Load Model", type="primary"):
             st.session_state.detector = AccidentDetector(model_path)
             st.sidebar.success("✅ Model loaded successfully!")
         except Exception as e:
-            st.sidebar.error(f"❌ Error: {e}")
+            st.sidebar.error(f"❌ Error: {str(e)[:100]}")
 
 # Detection settings
 st.sidebar.subheader("Detection Settings")
@@ -181,12 +195,18 @@ with tab1:
                     # Convert PIL to numpy array
                     image_np = np.array(image)
                     
+                    # Convert RGB to BGR for OpenCV
+                    if len(image_np.shape) == 3 and image_np.shape[2] == 3:
+                        image_np = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
+                    
                     # Run detection
                     result = st.session_state.detector.detect_image(image_np)
                     
                     # Display result
                     with col2:
-                        st.image(result['annotated'], caption="Detection Result", use_container_width=True)
+                        # Convert BGR back to RGB for display
+                        annotated_rgb = cv2.cvtColor(result['annotated'], cv2.COLOR_BGR2RGB)
+                        st.image(annotated_rgb, caption="Detection Result", use_container_width=True)
                         
                         if result['accident_detected']:
                             st.markdown(
@@ -305,6 +325,12 @@ with tab2:
                             file_name=f"processed_{Path(video_file.name).stem}.mp4",
                             mime="video/mp4"
                         )
+                
+                # Cleanup temp file
+                try:
+                    os.unlink(video_path)
+                except:
+                    pass
 
 # =========================================================
 # TAB 3: ANALYTICS
@@ -325,15 +351,18 @@ with tab3:
             st.metric("Accidents Detected", accident_count)
         with col3:
             if 'confidence' in df:
-                avg_conf = df[df['accident'] == True]['confidence'].mean() if accident_count > 0 else 0
+                valid_conf = df[df['confidence'].notna() & (df['confidence'] > 0)]
+                avg_conf = valid_conf['confidence'].mean() if len(valid_conf) > 0 else 0
                 st.metric("Avg Confidence", f"{avg_conf:.2%}")
         
         # Detection timeline
         if 'timestamp' in df and 'confidence' in df:
             st.subheader("Detection Timeline")
-            fig = px.line(df, x='timestamp', y='confidence', 
-                          title="Detection Confidence Over Time")
-            st.plotly_chart(fig, use_container_width=True)
+            valid_df = df[df['confidence'].notna() & (df['confidence'] > 0)]
+            if len(valid_df) > 0:
+                fig = px.line(valid_df, x='timestamp', y='confidence', 
+                              title="Detection Confidence Over Time")
+                st.plotly_chart(fig, use_container_width=True)
         
         # Detection type distribution
         if 'type' in df:
@@ -396,3 +425,9 @@ st.markdown(
     "<div style='text-align: center; color: #666;'>Accident Detection System | Powered by YOLOv8 | Temporal Smoothing Enabled</div>",
     unsafe_allow_html=True
 )
+
+# Cleanup on exit
+def cleanup():
+    if st.session_state.detector:
+        del st.session_state.detector
+    gc.collect()
